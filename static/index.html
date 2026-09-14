@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>진상 응대 시뮬레이터</title>
+<style>
+  :root { --bg:#f6f6f4; --card:#fff; --line:#e3e1dc; --text:#21201c; --muted:#75726c; --me:#2f6fed; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font-family:system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif; }
+  .wrap { max-width:720px; margin:0 auto; padding:16px; display:flex; flex-direction:column; height:100vh; }
+  h1 { font-size:18px; margin:4px 0 12px; }
+  .bar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  select, input, button { font:inherit; padding:8px 10px; border:1px solid var(--line);
+                          border-radius:8px; background:var(--card); color:var(--text); }
+  button { cursor:pointer; }
+  button.primary { background:var(--me); color:#fff; border-color:var(--me); }
+  #log { flex:1; overflow-y:auto; background:var(--card); border:1px solid var(--line);
+         border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:10px; }
+  .msg { max-width:80%; padding:9px 12px; border-radius:14px; line-height:1.5; white-space:pre-wrap; }
+  .me { align-self:flex-end; background:var(--me); color:#fff; border-bottom-right-radius:4px; }
+  .bot { align-self:flex-start; background:#efece7; border-bottom-left-radius:4px; }
+  .meta { font-size:12px; color:var(--muted); align-self:flex-start; margin-top:-4px; }
+  form { display:flex; gap:8px; margin-top:12px; }
+  form input { flex:1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>진상 응대 시뮬레이터</h1>
+  <div class="bar">
+    <select id="scene">
+      <option>카페</option><option>편의점</option><option>식당</option>
+      <option>콜센터</option><option>배달 앱</option><option>의류 매장</option>
+      <option>병원 원무과</option><option>일반 매장</option>
+    </select>
+    <select id="difficulty">
+      <option value="easy">쉬움</option>
+      <option value="normal" selected>보통</option>
+      <option value="hard">어려움</option>
+    </select>
+    <button id="reset">대화 초기화</button>
+  </div>
+  <div id="log"></div>
+  <form id="f">
+    <input id="input" placeholder="직원으로서 응대해 보세요…" autocomplete="off" />
+    <button class="primary">보내기</button>
+  </form>
+</div>
+<script>
+const sessionId = "web-" + Math.random().toString(36).slice(2, 10);
+const log = document.getElementById("log");
+
+function add(text, who, meta) {
+  const d = document.createElement("div");
+  d.className = "msg " + who;
+  d.textContent = text;
+  log.appendChild(d);
+  if (meta) {
+    const m = document.createElement("div");
+    m.className = "meta";
+    m.textContent = meta;
+    log.appendChild(m);
+  }
+  log.scrollTop = log.scrollHeight;
+}
+
+document.getElementById("f").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const input = document.getElementById("input");
+  const text = input.value.trim();
+  if (!text) return;
+  add(text, "me");
+  input.value = "";
+  try {
+    const res = await fetch("/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_id: sessionId,
+        message: text,
+        scene: document.getElementById("scene").value,
+        difficulty: document.getElementById("difficulty").value,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) { add("오류: " + (data.detail || res.status), "bot"); return; }
+    const meta = (data.sources || []).map((s) => `${s.type} ${s.score}`).join(" · ");
+    add(data.reply, "bot", meta ? "참고 사례: " + meta : "");
+  } catch (err) {
+    add("요청 실패: " + err.message, "bot");
+  }
+});
+
+document.getElementById("reset").addEventListener("click", async () => {
+  await fetch("/chat/reset?session_id=" + sessionId, { method: "POST" });
+  log.innerHTML = "";
+});
+</script>
+</body>
+</html>
